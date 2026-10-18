@@ -6,6 +6,11 @@ import type {
 } from "@tau/plugins/sync";
 import { createTransport } from "./transport";
 
+// 官方浏览器SDK支持此选项，类型包尚未声明。
+const checksumOptions: OSS.PutObjectOptions & { disabledMD5: boolean } = {
+  disabledMD5: false,
+};
+
 interface Config {
   accessKeyId: string;
   accessKeySecret: string;
@@ -65,7 +70,14 @@ export class OssSyncProvider implements SyncProvider {
       const result = await this.client.put(
         this.key(name),
         new Blob([new Uint8Array(content)]),
-        { timeout: 5 * 60 * 1000 },
+        {
+          timeout: 5 * 60 * 1000,
+          ...checksumOptions,
+          headers: {
+            "x-oss-storage-class": "Standard",
+            "x-oss-object-acl": "private",
+          },
+        },
       );
       return result.res.status === 200;
     } catch {
@@ -91,6 +103,7 @@ export class OssSyncProvider implements SyncProvider {
         "启用版本控制的 OSS 桶无法保证原子防覆盖，请使用未启用版本控制的同步桶",
       );
     await this.client.put(this.key(name), new Blob([new Uint8Array(content)]), {
+      ...checksumOptions,
       headers: { "x-oss-forbid-overwrite": "true" },
     });
     return true;

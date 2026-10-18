@@ -1,4 +1,5 @@
 import { createServer, type Server } from "node:http";
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { SyncProvider } from "@tau/plugins/sync";
 
@@ -31,6 +32,8 @@ const requests: {
   key: string;
   conditional: boolean;
   signed: boolean;
+  acl: unknown;
+  storageClass: unknown;
 }[] = [];
 beforeEach(async () => {
   expect(typeof globalThis.fetch).toBe("function");
@@ -47,6 +50,8 @@ beforeEach(async () => {
       key,
       conditional: req.headers["x-oss-forbid-overwrite"] === "true",
       signed: !!req.headers.authorization || url.searchParams.has("Signature"),
+      acl: req.headers["x-oss-object-acl"],
+      storageClass: req.headers["x-oss-storage-class"],
     });
     const fail = (status: number, code: string) => {
       res.writeHead(status, {
@@ -72,6 +77,8 @@ beforeEach(async () => {
     if (req.method === "PUT") {
       const chunks: Buffer[] = [];
       for await (const part of req) chunks.push(Buffer.from(part));
+      if (req.headers["content-md5"] !== createHash("md5").update(Buffer.concat(chunks)).digest("base64"))
+        return fail(400, "InvalidDigest");
       if (req.headers["x-oss-forbid-overwrite"] === "true" && objects.has(key))
         return fail(409, "FileAlreadyExists");
       objects.set(key, Buffer.concat(chunks));
@@ -122,6 +129,8 @@ it("普通上传直接PUT且允许覆盖，不额外HEAD；签名读取保留字
   expect(await provider.uploadFile("data", new Uint8Array([1, 2]))).toBe(true);
   expect(requests.map((item) => item.method)).toEqual(["PUT"]);
   expect(requests[0].conditional).toBe(false);
+  expect(requests[0].acl).toBe("private");
+  expect(requests[0].storageClass).toBe("Standard");
   expect(await provider.uploadFile("data", new Uint8Array([3]))).toBe(true);
   expect(await provider.downloadFile("data")).toEqual(new Uint8Array([3]));
   expect(await provider.fileExists("data")).toBe(true);
