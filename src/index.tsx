@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { definePlugin, type PluginSettingsProps } from "@tau/plugins";
-import { Button, Input } from "@tau/ui";
+import { Button, Input, SettingRow } from "@tau/ui";
 import { createOssSyncProvider } from "./sync";
 
 declare const __PLUGIN_META__: { id: string; name: string; version: string };
@@ -20,62 +20,134 @@ function OssSettings({ syncConfig }: PluginSettingsProps) {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   if (!syncConfig) return <p>请在客户端的同步设置中配置此插件。</p>;
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    setSaved(false);
+    try {
+      await syncConfig.save(config);
+      setSaved(true);
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        if (saving) return;
-        setSaving(true);
-        setError("");
-        setSaved(false);
-        try {
-          await syncConfig.save(config);
-          setSaved(true);
-        } catch (issue) {
-          setError(issue instanceof Error ? issue.message : "保存失败");
-        } finally {
-          setSaving(false);
-        }
-      }}
-    >
-      {(
-        [
-          ["bucket", "Bucket", "同步存储桶"],
-          ["region", "Region", "oss-cn-hangzhou"],
-          ["path", "路径前缀", "/"],
-          ["accessKeyId", "Access Key ID", ""],
-          ["accessKeySecret", "Access Key Secret", ""],
-        ] as const
-      ).map(([key, label, placeholder]) => (
-        <label key={key} className="flex flex-col gap-1">
-          <span>{label}</span>
-          <Input
-            aria-label={label}
-            type={key === "accessKeySecret" ? "password" : "text"}
-            value={config[key]}
-            placeholder={placeholder}
-            required={key !== "path"}
-            autoComplete="off"
-            spellCheck={false}
-            disabled={saving}
-            onChange={(event) => {
-              setSaved(false);
-              setConfig({ ...config, [key]: event.target.value });
-            }}
-          />
-        </label>
-      ))}
-      {error && <p role="alert">{error}</p>}
-      {saved && (
-        <p role="status">配置已保存，可以使用客户端的检查、上传和下载。</p>
+    <>
+      <SettingRow title="Bucket" description="同步存储桶名称">
+        <Input
+          className="w-[260px]"
+          aria-label="Bucket"
+          type="text"
+          value={config.bucket}
+          placeholder="同步存储桶"
+          required
+          autoComplete="off"
+          spellCheck={false}
+          disabled={saving}
+          onChange={(event) => {
+            setSaved(false);
+            setConfig({ ...config, bucket: event.target.value });
+          }}
+        />
+      </SettingRow>
+
+      <SettingRow title="Region" description="存储区域，例如 oss-cn-hangzhou">
+        <Input
+          className="w-[260px]"
+          aria-label="Region"
+          type="text"
+          value={config.region}
+          placeholder="oss-cn-hangzhou"
+          required
+          autoComplete="off"
+          spellCheck={false}
+          disabled={saving}
+          onChange={(event) => {
+            setSaved(false);
+            setConfig({ ...config, region: event.target.value });
+          }}
+        />
+      </SettingRow>
+
+      <SettingRow title="路径前缀" description="可选，留空表示根目录">
+        <Input
+          className="w-[260px]"
+          aria-label="路径前缀"
+          type="text"
+          value={config.path}
+          placeholder="/"
+          autoComplete="off"
+          spellCheck={false}
+          disabled={saving}
+          onChange={(event) => {
+            setSaved(false);
+            setConfig({ ...config, path: event.target.value });
+          }}
+        />
+      </SettingRow>
+
+      <SettingRow title="Access Key ID" description="从阿里云控制台获取">
+        <Input
+          className="w-[260px]"
+          aria-label="Access Key ID"
+          type="text"
+          value={config.accessKeyId}
+          placeholder=""
+          required
+          autoComplete="off"
+          spellCheck={false}
+          disabled={saving}
+          onChange={(event) => {
+            setSaved(false);
+            setConfig({ ...config, accessKeyId: event.target.value });
+          }}
+        />
+      </SettingRow>
+
+      <SettingRow title="Access Key Secret" description="请妥善保管，不要泄露">
+        <Input
+          className="w-[260px]"
+          aria-label="Access Key Secret"
+          type="password"
+          value={config.accessKeySecret}
+          placeholder=""
+          required
+          autoComplete="off"
+          spellCheck={false}
+          disabled={saving}
+          onChange={(event) => {
+            setSaved(false);
+            setConfig({ ...config, accessKeySecret: event.target.value });
+          }}
+        />
+      </SettingRow>
+
+      {error && (
+        <SettingRow title="">
+          <p role="alert" className="text-danger text-tau-body">
+            {error}
+          </p>
+        </SettingRow>
       )}
-      <div>
-        <Button type="submit" loading={saving}>
+      {saved && (
+        <SettingRow title="">
+          <p role="status" className="text-ink-2 text-tau-body">
+            配置已保存，可以使用客户端的检查、上传和下载。
+          </p>
+        </SettingRow>
+      )}
+
+      <SettingRow title="">
+        <Button onClick={handleSave} loading={saving} loadingText="保存中…">
           保存同步配置
         </Button>
-      </div>
-    </form>
+      </SettingRow>
+    </>
   );
 }
 
