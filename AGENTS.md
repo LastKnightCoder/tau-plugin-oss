@@ -1,6 +1,6 @@
 # AI 开发指南
 
-- 当前 SDK 0.37.0、UI 0.4.0，平台边界见 [COMPATIBILITY.md](COMPATIBILITY.md)。下文接口最低版本不是当前依赖版本。
+- 当前 SDK 0.38.0、UI 0.5.0，平台边界见 [COMPATIBILITY.md](COMPATIBILITY.md)。下文接口最低版本不是当前依赖版本。
 
 - 先阅读 DEVELOPMENT.md、API.md、manifest.json 和 src/index.tsx，理解现有示例后再修改。
 - 定义文档节点前阅读 EDITOR.md，使用静态 editorExtensions 并声明 manifest.editor；渲染代码须能在浏览器运行，不为移动端或网页另写渲染组件。

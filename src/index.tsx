@@ -1,5 +1,6 @@
+import { MobileSettings } from "./mobile-settings";
 import { useState } from "react";
-import { definePlugin, type PluginSettingsProps } from "@tau/plugins";
+import { definePlugin, usePluginEnvironment, type PluginSettingsProps } from "@tau/plugins";
 import { Button, Input, SettingRow } from "@tau/ui";
 import { createOssSyncProvider } from "./sync";
 
@@ -7,8 +8,7 @@ declare const __PLUGIN_META__: { id: string; name: string; version: string };
 
 function OssSettings({ syncConfig }: PluginSettingsProps) {
   const value = syncConfig?.value;
-  const fields =
-    value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const fields = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const [config, setConfig] = useState(() => ({
     bucket: String(fields.bucket ?? ""),
     region: String(fields.region ?? ""),
@@ -27,7 +27,7 @@ function OssSettings({ syncConfig }: PluginSettingsProps) {
     setError("");
     setSaved(false);
     try {
-      await syncConfig.save(config);
+      await syncConfig.save({ ...fields, ...config });
       setSaved(true);
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "保存失败");
@@ -49,7 +49,7 @@ function OssSettings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, bucket: event.target.value });
           }}
@@ -67,7 +67,7 @@ function OssSettings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, region: event.target.value });
           }}
@@ -84,7 +84,7 @@ function OssSettings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, path: event.target.value });
           }}
@@ -102,7 +102,7 @@ function OssSettings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, accessKeyId: event.target.value });
           }}
@@ -120,7 +120,7 @@ function OssSettings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, accessKeySecret: event.target.value });
           }}
@@ -151,6 +151,15 @@ function OssSettings({ syncConfig }: PluginSettingsProps) {
   );
 }
 
+function SettingsView(props: PluginSettingsProps) {
+  const environment = usePluginEnvironment();
+  return environment.platform === "desktop" ? (
+    <OssSettings {...props} />
+  ) : (
+    <MobileSettings {...props} />
+  );
+}
+
 export default definePlugin({
   ...__PLUGIN_META__,
   create: () => ({
@@ -158,13 +167,13 @@ export default definePlugin({
       context.sync.register({
         id: context.pluginId,
         name: "阿里云 OSS",
-        create: (config) => createOssSyncProvider(config, context.fetch),
+        create: config => createOssSyncProvider(config, context.fetch),
       });
       context.settings.register({
         id: "sync",
         title: "阿里云 OSS 同步存储",
         target: "sync",
-        component: OssSettings,
+        component: SettingsView,
       });
     },
   }),
