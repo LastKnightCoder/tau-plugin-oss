@@ -4,7 +4,7 @@
 
 ## 定义一个块
 
-先在 `manifest.json` 中加入 `"editor": true`（完整示例见下文），然后在插件定义里声明 `editorExtensions`：
+在插件定义中直接注册 `editorExtensions`；清单只声明支持平台和最低版本：
 
 ```tsx
 import { useState } from "react";
@@ -79,7 +79,7 @@ export default definePlugin({
   "platform": "desktop",
   "format": "cjs",
   "main": "main.js",
-  "editor": true
+  "targets": { "desktop": { "minAppVersion": "0.59.4" } }
 }
 ```
 

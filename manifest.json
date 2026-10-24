@@ -4,17 +4,16 @@
   "description": "使用阿里云 OSS 同步数据，在客户端同步设置中配置。",
   "categories": ["sync"],
   "keywords": ["阿里云", "OSS", "备份"],
-  "version": "0.3.0",
-  "requires": ["fetch", "sync"],
+  "version": "0.3.1",
   "targets": {
     "desktop": {
-      "minAppVersion": "0.59.2"
+      "minAppVersion": "0.59.4"
     },
     "android": {
-      "minAppVersion": "0.2.3"
+      "minAppVersion": "0.2.4"
     },
     "ios": {
-      "minAppVersion": "0.2.3"
+      "minAppVersion": "0.2.4"
     }
   }
 }
