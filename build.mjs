@@ -17,32 +17,24 @@ import { isBuiltin } from "node:module";
 
 const manifest = JSON.parse(await readFile("manifest.json", "utf8"));
 const portable = manifest.targets !== undefined;
-if (!portable && (manifest.profile !== undefined || manifest.targets !== undefined))
-  throw new Error("旧桌面格式不能混入跨端 profile/targets 声明");
-if (!/^[a-z0-9]+(?:[.-][a-z0-9]+)+$/.test(manifest.id))
-  throw new Error("插件 ID 应为小写字母、数字及点或连字符组成的命名空间");
-if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(manifest.version)) throw new Error("插件版本无效");
+
 // manifest 不写 main 时构建独立 Skill 包：没有代码入口，只打包 skills/ 目录
 const skillPackage = !portable && manifest.main === undefined;
+if (skillPackage) {
+  const { assertLocalId, comparePluginVersions } = await import("@tau/plugins/package");
+  assertLocalId(manifest.id);
+  comparePluginVersions(manifest.version, manifest.version);
+}
 let backend;
 let validateManifest;
-if (portable) {
-  if (skillPackage) throw new Error("跨端开发包必须有 JS 入口");
-  const api = await import("@tau/plugins/portable");
-  validateManifest = api.buildPortablePluginManifest;
-} else if (skillPackage) {
-  if (manifest.backend !== undefined || manifest.formatVersion !== 1)
-    throw new Error("Skill 包使用格式 1，不能声明后台");
-} else if (manifest.backend !== undefined) {
+if (manifest.targets) {
+  validateManifest = (await import("@tau/plugins/portable")).buildPortablePluginManifest;
+} else if (!skillPackage) {
   const api = await import("@tau/plugins/package");
-  backend = api.validateBackendManifest(manifest.backend);
+  if (manifest.backend !== undefined) backend = api.validateBackendManifest(manifest.backend);
   validateManifest = api.validatePluginManifest;
-  if (manifest.formatVersion !== 2 || backend.entry !== "backend.js")
-    throw new Error("后台模板使用格式 2 和 backend.js 入口");
-} else {
-  if (manifest.formatVersion !== 1) throw new Error("普通桌面插件使用格式 1");
-  validateManifest = (await import("@tau/plugins/package")).validatePluginManifest;
 }
+
 /** skills/<id>/ 下每个目录是一个 Skill：必须有带 description 的 SKILL.md，全部文件原样打包。 */
 async function collectSkills(staging) {
   let folders;
@@ -111,12 +103,8 @@ const pointer = path.resolve("dist", `.building-pointer-${buildId}`);
 try {
   const readme = await readFile("README.md", "utf8");
   if (!readme.trim()) throw new Error("README.md 必须包含插件介绍与使用说明");
-  if (
-    typeof manifest.description !== "string" ||
-    !manifest.description.trim() ||
-    manifest.description.length > 160
-  )
-    throw new Error("manifest.description 必须为1至160字简介");
+  if (typeof manifest.description !== "string" || !manifest.description.trim())
+    throw new Error("manifest.description 必须为非空简介");
   await writeFile(path.join(staging, "README.md"), readme);
   for (const name of ["LICENSE", "CHANGELOG.md"]) {
     try {
@@ -213,7 +201,7 @@ try {
         ...(styles ? { styles: "main.css" } : {}),
         ...(skills.ids.length ? { skills: skills.ids } : {}),
       });
-    else validateManifest(packaged, { strict: true });
+    else packaged = { ...validateManifest(packaged), description: manifest.description };
   }
   await writeFile(path.join(staging, "manifest.json"), JSON.stringify(packaged, null, 2));
   const destination = path.resolve("dist", `${manifest.version}-${buildId}`);

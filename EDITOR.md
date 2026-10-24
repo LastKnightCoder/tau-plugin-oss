@@ -69,17 +69,15 @@ export default definePlugin({
 
 ```json
 {
-  "formatVersion": 1,
   "id": "example.counter",
   "name": "计数块",
   "description": "在文档中放入交互计数块。",
   "version": "1.0.0",
-  "minAppVersion": "0.59.0",
-  "apiVersion": 1,
-  "platform": "desktop",
-  "format": "cjs",
-  "main": "main.js",
-  "targets": { "desktop": { "minAppVersion": "0.59.4" } }
+  "targets": {
+    "desktop": {
+      "minAppVersion": "0.59.4"
+    }
+  }
 }
 ```
 
