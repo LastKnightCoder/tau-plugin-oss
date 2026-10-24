@@ -89,10 +89,12 @@ export class OssSyncProvider implements SyncProvider {
     const response = await this.fetch(this.signedUrl(name, "GET"), {
       signal: AbortSignal.timeout(5 * 60 * 1000),
     });
-    if (!response.ok)
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
       throw Object.assign(new Error("OSS读取失败：" + response.status), {
         status: response.status,
       });
+    }
     return new Uint8Array(await response.arrayBuffer());
   }
   async fileExists(name: string): Promise<boolean> {
