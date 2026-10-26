@@ -26,9 +26,9 @@ SyncProvider、SyncProviderDefinition和RemoteFileInfo类型从@tau/plugins/sync
 
 ## 配置界面
 
-通过context.settings.register({ id: "sync", title, target: "sync", component })将配置表单挂在“设置→同步”。每个插件注册一个同步配置分区。
+通过context.settings.register({ id: "sync", title, target: "sync", form })声明配置字段（账号、存储位置等分组，字段类型 text / secret / url / choice / remote-choice），客户端在插件详情 › 设置里按桌面与手机分别渲染，负责显式保存、必填校验、连接测试和服务选用；“设置→同步”只列出各服务的摘要与状态。每个插件注册一个同步配置分区。
 
-组件从PluginSettingsProps.syncConfig.value读取配置，通过await syncConfig.save(config)保存。字段和校验由插件定义；失败时保留输入并展示错误。凭据不要写入日志或工作区context.storage；宿主按插件ID在本机应用级保存配置。
+未标 optional 的字段为必填，summary 字段拼成服务列表摘要；需要按账号补全或额外校验时实现 form.beforeSave(values, signal)，抛出的错误原样显示。配置值为字符串，保存时与已存配置合并。凭据不要写入日志或工作区context.storage；宿主按插件ID在本机应用级保存配置。
 
 客户端每次任务固定配置。关闭设置页不影响任务，停用插件保留配置；运行中的任务阻止停用和卸载。窗口关闭或崩溃时任务不会转移到Node进程继续执行。CLI不再提供同步功能。
 
