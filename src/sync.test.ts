@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { SyncProvider } from "@tau/plugins/sync";
+import { verifyOssV4 } from "../tests/verify-oss-v4";
 
 const target = vi.hoisted(() => ({ endpoint: "" }));
 vi.mock("ali-oss", async importOriginal => {
@@ -26,6 +27,7 @@ import { createOssSyncProvider } from "./sync";
 let server: Server, provider: SyncProvider;
 let versioning = "",
   versionDenied = false;
+let region = "cn-chengdu";
 const objects = new Map<string, Buffer>();
 const requests: {
   method: string;
@@ -34,6 +36,7 @@ const requests: {
   signed: boolean;
   acl: unknown;
   storageClass: unknown;
+  expires: string | null;
 }[] = [];
 beforeEach(async () => {
   expect(typeof globalThis.fetch).toBe("function");
@@ -42,6 +45,7 @@ beforeEach(async () => {
   requests.length = 0;
   versioning = "";
   versionDenied = false;
+  region = "cn-chengdu";
   server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost"),
       key = decodeURIComponent(url.pathname.slice(1));
@@ -49,9 +53,10 @@ beforeEach(async () => {
       method: req.method ?? "",
       key,
       conditional: req.headers["x-oss-forbid-overwrite"] === "true",
-      signed: !!req.headers.authorization || url.searchParams.has("Signature"),
+      signed: verifyOssV4(req, "bucket", region),
       acl: req.headers["x-oss-object-acl"],
       storageClass: req.headers["x-oss-storage-class"],
+      expires: url.searchParams.get("x-oss-expires"),
     });
     const fail = (status: number, code: string) => {
       res.writeHead(status, {
@@ -63,7 +68,7 @@ beforeEach(async () => {
       );
     };
     if (
-      (!req.headers.authorization && !url.searchParams.has("Signature")) ||
+      !requests[requests.length - 1].signed ||
       key.endsWith("denied") ||
       url.searchParams.get("prefix")?.endsWith("denied")
     )
@@ -89,7 +94,7 @@ beforeEach(async () => {
       res.setHeader("ETag", '"test"');
       return res.end();
     }
-    if (url.searchParams.has("prefix")) {
+    if (url.searchParams.has("prefix") || (key === "" && req.method === "GET")) {
       const prefix = url.searchParams.get("prefix") ?? "",
         marker = url.searchParams.get("marker") ?? "";
       const keys = [...objects.keys()]
@@ -115,7 +120,7 @@ beforeEach(async () => {
   provider = createOssSyncProvider(
     {
       bucket: "bucket",
-      region: "oss-cn-hangzhou",
+      region: "oss-cn-chengdu",
       accessKeyId: "test-key",
       accessKeySecret: "test-secret",
       path: "/note",
@@ -138,6 +143,8 @@ it("普通上传直接PUT且允许覆盖，不额外HEAD；签名读取保留字
   expect(await provider.downloadFile("data")).toEqual(new Uint8Array([3]));
   expect(await provider.fileExists("data")).toBe(true);
   expect(requests.every(item => item.signed)).toBe(true);
+  expect(requests.filter(item => item.method === "GET" || item.method === "HEAD")
+    .every(item => item.expires === "300")).toBe(true);
 });
 it("条件创建保留版本控制检查与原子防覆盖，竞争不会覆盖先提交的对象", async () => {
   const results = await Promise.allSettled(
@@ -187,4 +194,66 @@ it("带目录分隔符的前缀不扩展到其他目录，列举权限失败抛�
     { name: "a", path: "resources/a" },
   ]);
   await expect(provider.listFiles("denied")).rejects.toThrow();
+});
+
+it.each([
+  ["oss-cn-chengdu", "cn-chengdu", "/同步目录/"],
+  ["oss-cn-hangzhou", "cn-hangzhou", "/"],
+])("%s 在%s作用域完成V4同步读写、条件创建和分页", async (sdkRegion, signRegion, path) => {
+  region = signRegion;
+  const service = createOssSyncProvider({
+    bucket: "bucket",
+    region: sdkRegion,
+    accessKeyId: "test-key",
+    accessKeySecret: "test-secret",
+    path,
+  }, globalThis.fetch);
+  const name = "子目录/截图 中文 #+%!'().db";
+  const bytes = new Uint8Array([0, 255, 1, 128]);
+  expect(await service.uploadFile(name, bytes)).toBe(true);
+  expect(await service.downloadFile(name)).toEqual(bytes);
+  expect(await service.fileExists(name)).toBe(true);
+  expect(await service.createFileIfAbsent("versions/提交-1", bytes)).toBe(true);
+  await expect(service.createFileIfAbsent("versions/提交-1", new Uint8Array([9])))
+    .rejects.toThrow();
+  expect(await service.downloadFile("versions/提交-1")).toEqual(bytes);
+  expect((await service.listFiles()).map(file => file.path).sort())
+    .toEqual([name, "versions/提交-1"].sort());
+  expect(requests.every(request => request.signed)).toBe(true);
+});
+
+it("错误密钥在V4请求头和预签名URL中均被拒绝，不降级为V1", async () => {
+  const service = createOssSyncProvider({
+    bucket: "bucket",
+    region: "oss-cn-chengdu",
+    accessKeyId: "test-key",
+    accessKeySecret: "wrong-secret",
+    path: "/note",
+  }, globalThis.fetch);
+  expect(await service.uploadFile("data", new Uint8Array([1]))).toBe(false);
+  await expect(service.downloadFile("data")).rejects.toMatchObject({ status: 403 });
+  await expect(service.fileExists("data")).rejects.toMatchObject({ status: 403 });
+  await expect(service.listFiles()).rejects.toThrow();
+  await expect(service.createFileIfAbsent("commit", new Uint8Array([1]))).rejects.toThrow();
+  expect(requests).toHaveLength(5);
+  expect(requests.every(request => !request.signed)).toBe(true);
+});
+
+it("预签名URL的有效期被修改后验签失败", async () => {
+  expect(await provider.uploadFile("data", new Uint8Array([1]))).toBe(true);
+  const tamperedFetch: typeof globalThis.fetch = (input, init) => {
+    const url = new URL(String(input));
+    if (url.searchParams.has("x-oss-expires")) url.searchParams.set("x-oss-expires", "301");
+    return globalThis.fetch(url, init);
+  };
+  const service = createOssSyncProvider({
+    bucket: "bucket",
+    region: "oss-cn-chengdu",
+    accessKeyId: "test-key",
+    accessKeySecret: "test-secret",
+    path: "/note",
+  }, tamperedFetch);
+  await expect(service.downloadFile("data")).rejects.toMatchObject({ status: 403 });
+  await expect(service.fileExists("data")).rejects.toMatchObject({ status: 403 });
+  expect(requests.slice(1).every(request => !request.signed)).toBe(true);
 });

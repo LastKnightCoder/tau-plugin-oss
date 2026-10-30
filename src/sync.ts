@@ -42,6 +42,7 @@ export class OssSyncProvider implements SyncProvider {
       accessKeySecret: config.accessKeySecret,
       bucket: config.bucket,
       region: config.region,
+      authorizationV4: true,
       secure: true,
       urllib: createTransport(fetch),
     };
@@ -53,8 +54,13 @@ export class OssSyncProvider implements SyncProvider {
   }
   private signedUrl(name: string, method: "GET" | "HEAD") {
     // SDK支持HEAD签名，但当前类型声明的HTTPMethods漏掉了HEAD。
-    const sign = this.client.signatureUrl as (name: string, options: { method: string }) => string;
-    return sign.call(this.client, this.key(name), { method });
+    const sign = this.client.signatureUrlV4 as (
+      method: "GET" | "HEAD",
+      expires: number,
+      request: undefined,
+      name: string
+    ) => Promise<string>;
+    return sign.call(this.client, method, 300, undefined, this.key(name));
   }
   async uploadFile(name: string, content: Uint8Array): Promise<boolean> {
     try {
@@ -86,7 +92,7 @@ export class OssSyncProvider implements SyncProvider {
     return true;
   }
   async downloadFile(name: string): Promise<Uint8Array> {
-    const response = await this.fetch(this.signedUrl(name, "GET"), {
+    const response = await this.fetch(await this.signedUrl(name, "GET"), {
       signal: AbortSignal.timeout(5 * 60 * 1000),
     });
     if (!response.ok) {
@@ -98,7 +104,7 @@ export class OssSyncProvider implements SyncProvider {
     return new Uint8Array(await response.arrayBuffer());
   }
   async fileExists(name: string): Promise<boolean> {
-    const response = await this.fetch(this.signedUrl(name, "HEAD"), {
+    const response = await this.fetch(await this.signedUrl(name, "HEAD"), {
       method: "HEAD",
       signal: AbortSignal.timeout(60000),
     });
@@ -115,7 +121,11 @@ export class OssSyncProvider implements SyncProvider {
     let marker: string | undefined;
     do {
       const page = await this.client.list(
-        { prefix: fullPrefix || undefined, marker, "max-keys": 1000 },
+        {
+          ...(fullPrefix ? { prefix: fullPrefix } : {}),
+          ...(marker ? { marker } : {}),
+          "max-keys": 1000,
+        },
         {}
       );
       for (const object of page.objects ?? []) {
