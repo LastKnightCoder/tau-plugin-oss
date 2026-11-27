@@ -1,0 +1,11 @@
+{
+  "account.title": "账号",
+  "account.description": "在阿里云控制台的 AccessKey 管理中获取",
+  "account.accessKey": "AccessKey ID",
+  "account.secret": "AccessKey Secret",
+  "location.title": "存储位置",
+  "location.bucket": "Bucket",
+  "location.region": "区域",
+  "location.path": "目录",
+  "location.pathHint": "留空表示根目录"
+}

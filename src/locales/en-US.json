@@ -1,0 +1,11 @@
+{
+  "account.title": "Account",
+  "account.description": "Get these from AccessKey management in the Alibaba Cloud console",
+  "account.accessKey": "AccessKey ID",
+  "account.secret": "AccessKey Secret",
+  "location.title": "Storage location",
+  "location.bucket": "Bucket",
+  "location.region": "Region",
+  "location.path": "Directory",
+  "location.pathHint": "Leave empty to use the root directory"
+}

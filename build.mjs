@@ -35,6 +35,35 @@ if (manifest.targets) {
   validateManifest = api.validatePluginManifest;
 }
 
+const LOCALIZED_README_PATTERN = /^README\.([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)\.md$/;
+
+async function copyLocalizedReadmes(sourceDir, targetDir) {
+  const seen = new Set();
+  const entries = (await readdir(sourceDir, { withFileTypes: true })).sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
+  for (const entry of entries) {
+    const match = LOCALIZED_README_PATTERN.exec(entry.name);
+    if (!match) continue;
+    const sourcePath = path.join(sourceDir, entry.name);
+    const stat = await lstat(sourcePath);
+    if (stat.isSymbolicLink() || !stat.isFile())
+      throw new Error(`多语言说明文档必须是普通文件，不能是符号链接：${entry.name}`);
+    let locale;
+    try {
+      locale = new Intl.Locale(match[1]).toString();
+    } catch {
+      throw new Error(`多语言说明文档包含无效的语言标识：${entry.name}`);
+    }
+    if (seen.has(locale))
+      throw new Error(`多语言说明文档包含重复的语言标识：${locale}（${entry.name}）`);
+    const content = await readFile(sourcePath, "utf8");
+    if (!content.trim()) throw new Error(`${entry.name} 必须包含插件介绍与使用说明`);
+    seen.add(locale);
+    await writeFile(path.join(targetDir, `README.${locale}.md`), content);
+  }
+}
+
 /** skills/<id>/ 下每个目录是一个 Skill：必须有带 description 的 SKILL.md，全部文件原样打包。 */
 async function collectSkills(staging) {
   let folders;
@@ -106,6 +135,7 @@ try {
   if (typeof manifest.description !== "string" || !manifest.description.trim())
     throw new Error("manifest.description 必须为非空简介");
   await writeFile(path.join(staging, "README.md"), readme);
+  await copyLocalizedReadmes(".", staging);
   for (const name of ["LICENSE", "CHANGELOG.md"]) {
     try {
       await writeFile(path.join(staging, name), await readFile(name));
@@ -203,6 +233,11 @@ try {
       });
     else packaged = { ...validateManifest(packaged), description: manifest.description };
   }
+  packaged = {
+    ...packaged,
+    ...(manifest.i18n ? { i18n: manifest.i18n } : {}),
+    ...(manifest.locales ? { locales: manifest.locales } : {}),
+  };
   await writeFile(path.join(staging, "manifest.json"), JSON.stringify(packaged, null, 2));
   const destination = path.resolve("dist", `${manifest.version}-${buildId}`);
   await rename(staging, destination);

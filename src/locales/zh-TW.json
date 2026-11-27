@@ -1,0 +1,11 @@
+{
+  "account.title": "帳號",
+  "account.description": "於阿里雲控制台的 AccessKey 管理中取得",
+  "account.accessKey": "AccessKey ID",
+  "account.secret": "AccessKey Secret",
+  "location.title": "儲存位置",
+  "location.bucket": "Bucket",
+  "location.region": "區域",
+  "location.path": "目錄",
+  "location.pathHint": "留空表示根目錄"
+}
